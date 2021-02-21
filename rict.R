@@ -1,6 +1,6 @@
 
 # remotes::install_github("ropensci/sofa")
-# install.packages(c("sofa", "jsonlite", "tidyverse"))
+install.packages(c("sofa", "jsonlite", "tidyverse"))
 library(sofa)
 library("jsonlite")
 library(tidyverse)
