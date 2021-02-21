@@ -4,6 +4,7 @@
 library(sofa)
 library("jsonlite")
 library(purrr)
+library(readr)
 
 
 credentials <- readLines("credentials.txt", n = 2)
