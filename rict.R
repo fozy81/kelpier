@@ -3,7 +3,8 @@
 # install.packages(c("sofa", "jsonlite", "tidyverse"))
 library(sofa)
 library("jsonlite")
-library(tidyverse)
+library(purrr)
+
 
 credentials <- readLines("credentials.txt", n = 2)
 (x <- Cushion$new(user = credentials[1], pwd = credentials[2], transport = "http"))
