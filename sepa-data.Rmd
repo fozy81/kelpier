@@ -1,0 +1,51 @@
+---
+title: "Accessing SEPA Data Publication using R"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## SEPA Data Publication
+
+SEPA publishes a list of publicly accessible datasets on the (Environmental Data page)[https://www.sepa.org.uk/environment/environmental-data/].
+
+This can be a viewed in various formats such as web maps, .csv and .pdf. Some datasets are additionally published via a web service.
+
+We can use R to download and analyse datasets as required. For instance, to download the water monitoring locations for 2020 we can use the web service:
+
+```{r cars}
+library(httr)
+library(sf)
+library(tidyverse)
+
+# Name of service
+url <- parse_url("http://map.sepa.org.uk/arcgis/rest/services")
+# Name of resouce
+url$path <- paste(url$path, "WMS_Environmental_Monitoring/MapServer/11/query", sep = "/")
+# Query
+url$query <- list(where = "YEAR = 2020",
+                  outFields = "*",
+                  returnGeometry = "true",
+                  f = "geojson")
+request <- build_url(url)
+
+
+monitoring_plan <- st_read(request)
+
+monitoring_plan %>%
+  filter(PURPOSE == "Water Framework Directive - Risk Checking") %>%
+  ggplot() + geom_sf(aes(fill = PURPOSE))
+
+
+```
+
+
+More details on the search parameters are described on the web service page. The main parameter for filter responses is the 'where' clause. This uses the basic SQL commands.
+
+
+
+
+
+

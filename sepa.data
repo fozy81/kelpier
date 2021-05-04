@@ -1,0 +1,40 @@
+---
+title: "Accessing SEPA Data Publication using R"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## SEPA Data Publication
+
+SEPA publishes a list of publicly accessible datasets on the (Environmental Data page)[https://www.sepa.org.uk/environment/environmental-data/].
+
+This can be a viewed in various formats such as web maps, csv and pdfs. Some datasets are additionally published via a web service.
+
+We can use R to download and analyse these datasets if required.
+
+```{r cars}
+library(httr)
+library(sf)
+library(tmap)
+
+url <- parse_url("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services")
+url$path <- paste(url$path, "USA_Railroads_1/FeatureServer/0/query", sep = "/")
+url$query <- list(where = "STATE = 'FL'",
+                  outFields = "*",
+                  returnGeometry = "true",
+                  f = "geojson")
+request <- build_url(url)
+
+Florida_Railroads <- st_read(request)
+
+tmap_mode(mode = "view")
+tm_shape(Florida_Railroads)+tm_lines(col="NET_DESC", palette = "Set1", lwd = 5)
+
+```
+
+
+
+
