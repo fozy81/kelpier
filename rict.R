@@ -123,6 +123,11 @@ while (TRUE) {
 
           # calc WHPT
           testdata$SAMPLE_ID <- 1
+          # Kelpie doesn't have commas in the Taxon names so adding them back
+          # in for metric/invert table lookup
+          testdata$TAXON <- gsub(pattern = " \\+ ",
+                                 replacement = ", ",
+                                 x = testdata$TAXON)
 
           metricResults <- calcWhpt(testdata[!is.na(testdata$RESULT), ])
 
@@ -290,42 +295,62 @@ while (TRUE) {
                 )
               )
 
-              aspt_question <- db_query(
+              questions <- db_query(
                 cushion = x,
                 dbname = "kelpie",
                 selector = list(
                   data.form = list(`$eq` = gsub(
                     "form_2_", "", whpt_form$docs[[1]]$`_id`
-                  )),
-                  data.question = list(`$eq` = "WHPT ASPT")
-                )
-              )
+                  ))))
+              # ,
+              #     data.question = list(`$eq` = "WHPT ASPT")
+              #   )
+              # )
+              # questions <- map_df(aspt_question, function(response) {
+              #   fromJSON(response, flatten = T)$docs
+              # })
+              # metricResults$RESULT
+              n <- 0
+              docs1 <- lapply(questions$docs, function(question) {
 
-              docs1 <- paste0(
-                '{"data": {
-                  "question": "WHPT ASPT",
-                  "response": "',
-                metricResults$RESULT[2],
-                '",
-                  "multiEntry": false,
-                  "edit": false,
-                  "type": "number",
-                  "archive": false,
-                  "pos": 1,
-                  "form": "',
-                gsub("form_2_", "", whpt_form$docs[[1]]$`_id`),
-                '"
-                  }
-               }'
-              )
+                n <<- n + 1
+                # question$data$response <- metricResults$RESULT[n]
+
+                question <- paste0(
+                    '{"data": {
+                    "question": "',question$data$question,'",
+                    "response": "',
+                    metricResults$RESULT[metricResults$DETERMINAND == toupper(gsub(" ", "_", question$data$question))],
+                    '",
+                    "multiEntry": false,
+                    "edit": false,
+                    "type": "number",
+                    "archive": false,
+                    "pos": 1,
+                    "form": "',
+                    #gsub("form_2_", "", whpt_form$`_id`),
+                    gsub("form_2_", "",   whpt_form$docs[[1]]$`_id`),
+                    '"
+                    }
+                 }'
+                  )
+
+                return(question)
+              })
+
+                 n <- 0
+              lapply(docs1, function(doc){
+                n <<- n + 1
 
               doc_update(
                 cushion = x,
                 dbname = "kelpie",
-                docs1,
-                docid = aspt_question$docs[[1]]$`_id`,
-                rev = aspt_question$docs[[1]]$`_rev`
+                doc = doc,
+                as = "json",
+                docid = questions$docs[[n]]$`_id`,
+                rev = questions$docs[[n]]$`_rev`
               )
+              })
 
             }
           }
