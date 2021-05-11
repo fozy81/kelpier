@@ -227,12 +227,113 @@ while (TRUE) {
               testdata %>%  select(-c(`_id`, `Taxon name`, Count)) %>%  summarise_all(mean, na.rm = TRUE)
             substrate$Mean_Depth <- depth
             substrate$Mean_Width <- substrate$Width
+            substrate$Date <-  table$data.response[table$data.question == "Date"]
+            substrate$Season <-  as.Date(substrate$Date, "%Y-%m-%d")
+
+            calcSeason <- function(dates,
+                                   winter = "2012-12-1",
+                                   spring = "2012-3-1",
+                                   summer = "2012-6-1",
+                                   autumn = "2012-9-1", output = "numeric") {
+              WS <- as.Date(winter, format = "%Y-%m-%d") # Winter Solstice
+              SE <- as.Date(spring, format = "%Y-%m-%d") # Spring Equinox
+              SS <- as.Date(summer, format = "%Y-%m-%d") # Summer Solstice
+              FE <- as.Date(autumn, format = "%Y-%m-%d") # Fall Equinox
+
+
+              d <- as.Date(strftime(dates, format = "2012-%m-%d"))
+              # Convert dates from any year to 2012 dates
+              if (output == "numeric") {
+                return(ifelse(d >= WS | d < SE, "4",
+                              ifelse(d >= SE & d < SS, "1",
+                                     ifelse(d >= SS & d < FE, "2", "3")
+                              )
+                ))
+              }
+
+              if (output == "shortname") {
+                return(ifelse(d >= WS | d < SE, "WIN",
+                              ifelse(d >= SE & d < SS, "SPR",
+                                     ifelse(d >= SS & d < FE, "SUM", "AUT")
+                              )
+                ))
+              }
+
+              if (output == "fullname") {
+                return(ifelse(d >= WS | d < SE, "Winter",
+                              ifelse(d >= SE & d < SS, "Spring",
+                                     ifelse(d >= SS & d < FE, "Summer", "Autumn")
+                              )
+                ))
+              }
+            }
+
+
+            substrate$Season <-  calcSeason(substrate$Date)
             # Join WHPT, substrate, location characteristics into rict input
             metrics <-
               metricResults %>%  pivot_wider(names_from = DETERMINAND, values_from = RESULT)
-
+browser()
             rict_input <-
               cbind(substrate, physical_characteristics, metrics)
+            rict_input$dist_from_source <- rict_input$`Distance from source`
+            rict_input$location <- 1
+            # Sort out season columns...
+
+            columns_required <- c("location",
+              "Season",
+              "WHPT NTAXA", "WHPT ASPT"
+            )
+            spring <- as_tibble(rict_input[
+              rict_input$Season == 1,
+              c(columns_required)
+            ])
+
+            names(spring) <- c(
+              "location",
+              "Spr_Season_ID",
+              "Spr_TL2_WHPT_NTaxa (AbW,DistFam)",
+              "Spr_TL2_WHPT_ASPT (AbW,DistFam)"
+            )
+
+            summer <- as_tibble(rict_input[
+              rict_input$Season == 2,
+              c(columns_required)
+            ])
+
+            names(summer) <- c(
+              "location",
+              "Sum_Season_ID",
+              "Sum_TL2_WHPT_NTaxa (AbW,DistFam)",
+              "Sum_TL2_WHPT_ASPT (AbW,DistFam)"
+            )
+
+            autumn <- as_tibble(rict_input[
+              rict_input$Season == 3,
+              c(columns_required)
+            ])
+
+            names(autumn) <- c(
+              "location",
+              "Aut_Season_ID",
+              "Aut_TL2_WHPT_NTaxa (AbW,DistFam)",
+              "Aut_TL2_WHPT_ASPT (AbW,DistFam)"
+            )
+
+
+            rict_input <- dplyr::full_join(rict_input, spring, by = c(
+              "location" = "location"
+            ))
+
+            rict_input <- dplyr::full_join(rict_input, summer, by = c(
+              "location" = "location"
+            ))
+            rict_input <- dplyr::full_join(rict_input, autumn, by = c(
+              "location" = "location"
+            ))
+
+
+            browser()
 
             # Get required form to populate with calculated responses
             rict_form <- db_query(
@@ -256,14 +357,26 @@ while (TRUE) {
                 )
               )
 
-              test_rict <-
-                rict(demo_observed_values[1, ], year_type = "single")
+              # test_rict <-
+              #   rict(demo_observed_values[1, ], year_type = "single")
+              rict_input$waterbody <- 1
+              rict_input$SITE <- "Test"
+              rict_input$Year <- as.integer(format.Date(rict_input$Date, "%Y"))
+              rict_input$velocity <- NA
+              rict_input$hardness <- NA
+              rict_input$calcium <- NA
+              rict_input$conductivity <- NA
+              rict_input$AUT_NTAXA_BIAS <- NA
+              rict_input$SUM_NTAXA_BIAS <- NA
+              rict_input$SPR_NTAXA_BIAS <- NA
+
+             rict_class <- rict(rict_input, year_type = "single")
 
               docs1 <- paste0(
                 '{"data": {
                   "question": "Overall Class",
                   "response": "',
-                  test_rict$mostProb_MINTA,
+                   rict_class$mostProb_MINTA,
                   '",
                   "multiEntry": false,
                   "edit": false,
