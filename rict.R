@@ -273,7 +273,7 @@ while (TRUE) {
             # Join WHPT, substrate, location characteristics into rict input
             metrics <-
               metricResults %>%  pivot_wider(names_from = DETERMINAND, values_from = RESULT)
-browser()
+
             rict_input <-
               cbind(substrate, physical_characteristics, metrics)
             rict_input$dist_from_source <- rict_input$`Distance from source`
@@ -333,9 +333,7 @@ browser()
             ))
 
 
-            browser()
-
-            # Get required form to populate with calculated responses
+          # Get required form to populate with calculated responses
             rict_form <- db_query(
               cushion = x,
               dbname = "kelpie",
@@ -346,14 +344,13 @@ browser()
             )
 
             if (length(rict_form$docs) != 0) {
-              ntaxa_question <- db_query(
+             rict_questions <- db_query(
                 cushion = x,
                 dbname = "kelpie",
                 selector = list(
                   data.form = list(`$eq` = gsub(
                     "form_2_", "", rict_form$docs[[1]]$`_id`
-                  )),
-                  data.question = list(`$eq` = "Overall Class")
+                  ))
                 )
               )
 
@@ -371,12 +368,40 @@ browser()
               rict_input$SPR_NTAXA_BIAS <- NA
 
              rict_class <- rict(rict_input, year_type = "single")
+             rict_pred <- rict_predict(rict_input)
+             overall <- rict_class[, paste0("mintawhpt_",
+                   tolower(calcSeason(rict_input$Date, output = "shortname")),
+                   "_mostProb")]
 
-              docs1 <- paste0(
+             aspt <- rict_class[, paste0("mostProb_s_ASPT_",
+                                            tolower(
+                                              calcSeason(rict_input$Date,
+                                                         output = "shortname")))]
+
+             ntaxa <- rict_class[,
+                                 paste0("mostProb_NTAXA_",
+                                            tolower(
+                                              calcSeason(rict_input$Date,
+                                                         output = "shortname")))]
+
+             pred_ntaxa <- rict_pred[, paste0("TL2_WHPT_NTAXA_AbW_DistFam_",  tolower(
+               calcSeason(rict_input$Date,
+                          output = "shortname")))]
+             pred_aspt <- rict_pred[, paste0("TL2_WHPT_ASPT_AbW_DistFam_",  tolower(
+               calcSeason(rict_input$Date,
+                          output = "shortname")))]
+
+            answers <- list(overall, aspt, ntaxa, pred_aspt, pred_ntaxa)
+            names(answers) <- c("Overall Class", "ASPT Class","NTAXA Class",
+                                "Predicted ASPT","Predicted NTAXA")
+            n <- 0
+            rict_docs <- lapply(rict_questions$docs, function(question) {
+              n <<- n + 1
+              rict_response <- paste0(
                 '{"data": {
-                  "question": "Overall Class",
+                  "question": "', rict_questions$docs[[n]]$data$question,'",
                   "response": "',
-                   rict_class$mostProb_MINTA,
+                   answers[rict_questions$docs[[n]]$data$question],
                   '",
                   "multiEntry": false,
                   "edit": false,
@@ -389,14 +414,20 @@ browser()
                   }
                }'
               )
+              return(rict_response)
+            })
 
+            n <- 0
+            lapply(rict_docs, function(doc){
+              n <<- n + 1
               doc_update(
                 cushion = x,
                 dbname = "kelpie",
-                docs1,
-                docid = ntaxa_question$docs[[1]]$`_id`,
-                rev = ntaxa_question$docs[[1]]$`_rev`
+                doc,
+                docid = rict_questions$docs[[n]]$`_id`,
+                rev = rict_questions$docs[[n]]$`_rev`
               )
+            })
 
               whpt_form <- db_query(
                 cushion = x,
