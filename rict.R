@@ -24,6 +24,16 @@ credentials <- readLines("credentials.txt", n = 2)
     ))
 
 
+
+# (x <-
+#     Cushion$new(
+#       user = "",
+#       pwd = "",
+#       transport = "https",
+#       port = NULL,
+#       host = ""
+#     ))
+
 # x$ping()
 # db_list(x)
 i <- 0
@@ -59,7 +69,7 @@ while (TRUE) {
     since <- res$results[[1]]$seq
     write_lines(since, file = "since.txt")
     if (!is.null(res$results[[1]]$doc$data$question) &&
-        res$results[[1]]$doc$data$question == "Taxon name" &&
+        res$results[[1]]$doc$data$question == "Species" &&
         res$results[[1]]$doc$data$response != "") {
       # Do work - check if has doc$data (question/response?)
       data <- res$results[[1]]$doc$data
@@ -77,9 +87,17 @@ while (TRUE) {
       all_forms <- db_query(
         cushion = x,
         dbname = "kelpie",
-        selector = list(data.task = list(`$eq` = form$data$task))
+        selector = list(data.task = list(`$eq` = form$data$task)),
+        limit = 100
       )
 
+      # all_forms <- db_query(
+      #   cushion = x,
+      #   dbname = "kelpie",
+      #   selector = list(`_id` = list(`$eq` = 'question_2_476BC5D1-E81F-D2C6-8630-FC98E80BF2DA'))
+      # )
+
+    #  question_2_476BC5D1-E81F-D2C6-8630-FC98E80BF2DA
 
       # find only required forms (not archived etc)
       passing <- map(all_forms$docs, function(form) {
@@ -90,6 +108,8 @@ while (TRUE) {
           return()
         }
       })
+
+     passing[sapply(passing, is.null)] <- NULL
 
       # Query required responses from forms
       responses <- map(unlist(passing), function(id) {
@@ -110,17 +130,18 @@ while (TRUE) {
       })
       # pivot/ tidy responses
       if (nrow(data) > 0) {
+
         table <- as_tibble(data, .name_repair = "check_unique") %>%
           filter(data.response != "") %>%
           select(data.form, data.response, data.question)
         testdata <-
           pivot_wider(table, names_from = data.question, values_from = data.response)
-        testdata <- type.convert(testdata)
+        testdata <- type.convert(testdata, as.is = TRUE)
 
         if ("Count" %in% colnames(testdata)) {
-          testdata <- select(testdata,  data.form, `Taxon name`, Count)
+          testdata <- select(testdata,  data.form, Species, Count)
           names(testdata) <- c("SAMPLE_ID", "TAXON", "RESULT")
-
+          testdata <- testdata[!is.na(testdata$TAXON), ]
           # calc WHPT
           testdata$SAMPLE_ID <- 1
           # Kelpie doesn't have commas in the Taxon names so adding them back
@@ -180,7 +201,9 @@ while (TRUE) {
             all_forms_json <- db_query(
               cushion = x,
               dbname = "kelpie",
-              selector = list(data.task = list(`$eq` = form$data$task))
+              selector = list(data.task = list(`$eq` = form$data$task
+                                           )
+                              )
             )
 
             passing <- map(all_forms_json$docs, function(form) {
@@ -215,20 +238,29 @@ while (TRUE) {
               filter(data.response != "") %>%
               select(`_id`, data.response, data.question)
 
-            depth <- suppressWarnings(mean(as.numeric(table$data.response[table$data.question %in% c("Left Channel Depth",
-                                                                                    "Right Channel Depth",
-                                                                                    "Mid-channel Depth")]), na.rm = TRUE))
+            depth <- suppressWarnings(mean(as.numeric(table$data.response[table$data.question %in% c("Left channel depth",
+                                                                                    "Right channel depth",
+                                                                                    "Mid-channel depth")]), na.rm = TRUE))
 
             testdata <-  table %>%
               pivot_wider(names_from = data.question, values_from = data.response)
 
-            testdata <- type.convert(testdata)
+            testdata <- type.convert(testdata, as.is = FALSE)
             substrate <-
-              testdata %>%  select(-c(`_id`, `Taxon name`, Count)) %>%  summarise_all(mean, na.rm = TRUE)
+              testdata %>%  select(-c(`_id`, Species, Count)) %>%  summarise_all(mean, na.rm = TRUE)
             substrate$Mean_Depth <- depth
             substrate$Mean_Width <- substrate$Width
             substrate$Date <-  table$data.response[table$data.question == "Date"]
             substrate$Season <-  as.Date(substrate$Date, "%Y-%m-%d")
+            substrate$NGR <- NULL
+            substrate$Easting <- NULL
+            substrate$Northing <- NULL
+            substrate$`Distance from source` <- NULL
+            substrate$Discharge <- NULL
+            substrate$Slope <- NULL
+            substrate$Alkalinity <- NULL
+            substrate$Altitude <- NULL
+
 
             calcSeason <- function(dates,
                                    winter = "2012-12-1",
@@ -282,7 +314,7 @@ while (TRUE) {
 
             columns_required <- c("location",
               "Season",
-              "WHPT NTAXA", "WHPT ASPT"
+              "WHPT_NTAXA", "WHPT_ASPT"
             )
             spring <- as_tibble(rict_input[
               rict_input$Season == 1,
@@ -366,6 +398,11 @@ while (TRUE) {
               rict_input$AUT_NTAXA_BIAS <- NA
               rict_input$SUM_NTAXA_BIAS <- NA
               rict_input$SPR_NTAXA_BIAS <- NA
+              rict_input$Boulder_Cobbles  <- rict_input$`Boulder/Cobbles`
+              rict_input$Silt_Clay <- rict_input$`Silt/Clay`
+              rict_input$Pebbles_Gravel  <- rict_input$`Pebbles/Gravel`
+              rict_input$Northing <- as.character(rict_input$Northing)
+              rict_input$Easting <-   as.character(rict_input$Easting)
 
              rict_class <- rict(rict_input, year_type = "single")
              rict_pred <- rict_predict(rict_input)
@@ -373,7 +410,7 @@ while (TRUE) {
                    tolower(calcSeason(rict_input$Date, output = "shortname")),
                    "_mostProb")]
 
-             aspt <- rict_class[, paste0("mostProb_s_ASPT_",
+             aspt <- rict_class[, paste0("mostProb_ASPT_",
                                             tolower(
                                               calcSeason(rict_input$Date,
                                                          output = "shortname")))]
@@ -392,8 +429,8 @@ while (TRUE) {
                           output = "shortname")))]
 
             answers <- list(overall, aspt, ntaxa, pred_aspt, pred_ntaxa)
-            names(answers) <- c("Overall Class", "ASPT Class","NTAXA Class",
-                                "Predicted ASPT","Predicted NTAXA")
+            names(answers) <- c("Overall Class", "WHPT ASPT Class","WHPT NTAXA Class",
+                                "Predicted WHPT ASPT","Predicted WHPT NTAXA")
             n <- 0
             rict_docs <- lapply(rict_questions$docs, function(question) {
               n <<- n + 1
